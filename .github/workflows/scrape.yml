@@ -1,0 +1,53 @@
+name: NSE PCR Scraper
+
+on:
+  # Manual trigger — use this first to test whether GitHub's runner IPs
+  # can reach NSE before trusting the cron schedule below. Go to the
+  # Actions tab on GitHub, pick this workflow, and click "Run workflow".
+  workflow_dispatch:
+
+  schedule:
+    # All times below are UTC. IST = UTC + 5:30, so:
+    - cron: '38 3 * * 1-5'          # 9:08 AM IST — initial snapshot
+    - cron: '45,50,55 3 * * 1-5'    # 9:15, 9:20, 9:25 AM IST
+    - cron: '0-30/5 4 * * 1-5'      # 9:30 AM - 11:00 AM IST, every 5 min
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Run scraper
+        run: node index.js
+        env:
+          HEADLESS: 'true'
+          # Not used yet — placeholders for when the Supabase write step
+          # is added. Add real values under Settings > Secrets and
+          # variables > Actions once that's wired up; harmless if unset.
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+
+      - name: Upload snapshot as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: snapshot-${{ github.run_id }}
+          path: |
+            snapshots/
+            last-raw-response.json
+          if-no-files-found: ignore
+          retention-days: 14
